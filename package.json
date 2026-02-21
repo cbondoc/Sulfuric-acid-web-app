@@ -1,0 +1,7 @@
+{
+  "name": "sulfuric-acid-web-app",
+  "private": true,
+  "scripts": {
+    "build": "cd dashboard && npm ci && npm run build"
+  }
+}
