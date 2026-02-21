@@ -33,8 +33,10 @@ export function useLatestRelayEvent() {
           setEvent(payload.new as RelayLog);
         }
       )
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') setError('Realtime subscription failed');
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR') {
+          setError(err?.message ?? 'Realtime subscription failed');
+        }
       });
 
     return () => {
@@ -75,8 +77,10 @@ export function useRealtimeRelayLogs(limit = 50) {
           setLogs((prev) => [payload.new as RelayLog, ...prev].slice(0, limit));
         }
       )
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') setError('Realtime subscription failed');
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR') {
+          setError(err?.message ?? 'Realtime subscription failed');
+        }
       });
 
     return () => {
