@@ -1,7 +1,7 @@
 // === RELAY SEQUENCE + SUPABASE (Arduino R4 WiFi) ===
-// Wiring and sequence match sulfuric_arduino.ino; WiFi/Supabase from parkinsons_arduino.ino.
+// Wiring and sequence: Acid → Water → Mixer → Rest (x2). Logs each step to Supabase.
 //
-// --- Relay Mapping (same as sulfuric_arduino) ---
+// --- Relay Mapping ---
 // A0 → Relay 1 → Mixer (220V)
 // A1 → Relay 2 → Container Rest
 // A2 → Relay 3 → Container Acid
@@ -9,7 +9,7 @@
 //
 // 1. Set WIFI_SSID, WIFI_PASS, SUPABASE_HOST, SUPABASE_API_KEY below.
 // 2. Run supabase/schema.sql in your Supabase project.
-// 3. Upload and open Serial Monitor (115200).
+// 3. Board: Arduino Uno R4 WiFi. Upload and open Serial Monitor (115200).
 
 #include <WiFiS3.h>
 
@@ -22,7 +22,7 @@ const char SUPABASE_PATH[] = "/rest/v1/relay_logs";
 
 WiFiSSLClient sslClient;
 
-/* ==================== RELAY (from sulfuric_arduino) ==================== */
+/* ==================== RELAY ==================== */
 int mixerDuration      = 10000;   // Relay 1 (Mixer)
 int containerRestTime  = 30000;   // Relay 2 (Container Rest)
 int containerAcidTime  = 30000;   // Relay 3 (Container Acid)
@@ -111,7 +111,6 @@ bool logRelayOnToSupabase(const char* batchId, const char* relayName, const char
   sslClient.println();
   sslClient.print(body);
 
-  // Wait for response (short timeout)
   unsigned long start = millis();
   while (sslClient.connected() && millis() - start < 10000) {
     if (sslClient.available()) {

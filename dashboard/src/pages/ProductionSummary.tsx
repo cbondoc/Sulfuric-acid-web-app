@@ -1,4 +1,14 @@
+import { useMemo } from 'react';
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { useProductionCycles } from '../hooks/useProductionCycles';
+import type { ProductionCycle } from '../types/relay';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -7,8 +17,35 @@ function formatTime(iso: string) {
   });
 }
 
+/** Build daily production counts for the last 30 days (by finished_at date). */
+function dailyProductionForPastMonth(cycles: ProductionCycle[]): { date: string; count: number; label: string }[] {
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days: { date: string; count: number; label: string }[] = [];
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    const dateKey = d.toISOString().slice(0, 10);
+    const label = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    days.push({ date: dateKey, count: 0, label });
+  }
+
+  for (const c of cycles) {
+    const finished = new Date(c.finished_at);
+    finished.setHours(0, 0, 0, 0);
+    const dateKey = finished.toISOString().slice(0, 10);
+    const entry = days.find((d) => d.date === dateKey);
+    if (entry) entry.count += 1;
+  }
+
+  return days;
+}
+
 export function ProductionSummary() {
   const { cycles, totalProducts, error, loading } = useProductionCycles();
+  const dailyData = useMemo(() => dailyProductionForPastMonth(cycles), [cycles]);
 
   return (
     <div className="space-y-8">
@@ -33,6 +70,62 @@ export function ProductionSummary() {
         ) : (
           <p className="text-4xl font-bold text-amber-400">{totalProducts}</p>
         )}
+      </section>
+
+      {/* Daily production chart – last 30 days */}
+      <section className="rounded-xl border border-stone-800 bg-stone-900/30 overflow-hidden">
+        <h3 className="border-b border-stone-800 px-4 py-3 text-sm font-medium text-stone-400">
+          Production per day (last 30 days)
+        </h3>
+        <div className="p-4">
+          {loading ? (
+            <p className="text-stone-500">Loading…</p>
+          ) : (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dailyData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="prodGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgb(251 191 36)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="rgb(251 191 36)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: 'rgb(163 163 163)', fontSize: 11 }}
+                    axisLine={{ stroke: 'rgb(68 64 60)' }}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fill: 'rgb(163 163 163)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={24}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgb(41 37 36)',
+                      border: '1px solid rgb(68 64 60)',
+                      borderRadius: '8px',
+                    }}
+                    labelStyle={{ color: 'rgb(214 211 209)' }}
+                    formatter={(value: number) => [value, 'Products']}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    stroke="rgb(251 191 36)"
+                    strokeWidth={2}
+                    fill="url(#prodGradient)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Batches table */}
