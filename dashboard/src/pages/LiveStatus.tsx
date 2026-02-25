@@ -1,3 +1,4 @@
+import { useProductionCycles } from '../hooks/useProductionCycles';
 import { useLatestRelayEvent, useRealtimeRelayLogs } from '../hooks/useRealtimeRelayLogs';
 
 function formatTime(iso: string) {
@@ -10,14 +11,25 @@ function formatTime(iso: string) {
 export function LiveStatus() {
   const { event: currentEvent, error: currentError } = useLatestRelayEvent();
   const { logs, error: logsError } = useRealtimeRelayLogs(50);
+  const { totalProducts: cyclesFinished, loading: cyclesLoading } = useProductionCycles();
 
   const err = currentError ?? logsError;
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-xl font-semibold text-stone-100">Live Status</h2>
-        <p className="text-sm text-stone-500">Current relay and real-time event log</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-stone-100">Live Status</h2>
+          <p className="text-sm text-stone-500">Current relay and real-time event log</p>
+        </div>
+        <div className="rounded-lg border border-stone-700 bg-stone-800/50 px-4 py-2">
+          <p className="text-xs font-medium uppercase tracking-wider text-stone-500">
+            Cycles finished
+          </p>
+          <p className="text-2xl font-bold text-amber-400">
+            {cyclesLoading ? '…' : cyclesFinished}
+          </p>
+        </div>
       </div>
 
       {err && (
