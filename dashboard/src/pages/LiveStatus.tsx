@@ -9,9 +9,9 @@ function formatTime(iso: string) {
 }
 
 export function LiveStatus() {
-  const { event: currentEvent, error: currentError } = useLatestRelayEvent();
-  const { logs, error: logsError } = useRealtimeRelayLogs(50);
-  const { totalProducts: cyclesFinished, loading: cyclesLoading } = useProductionCycles();
+  const { event: currentEvent, error: currentError } = useLatestRelayEvent({ todayOnly: true });
+  const { logs, error: logsError } = useRealtimeRelayLogs(50, { todayOnly: true });
+  const { totalProducts: cyclesFinished, loading: cyclesLoading } = useProductionCycles({ todayOnly: true });
 
   const err = currentError ?? logsError;
 

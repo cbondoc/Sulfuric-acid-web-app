@@ -2,19 +2,31 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { RelayLog } from '../types/relay';
 
+function startOfTodayISO(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+type TodayOnlyOptions = { todayOnly?: boolean };
+
 /** Latest relay event (current active relay display). */
-export function useLatestRelayEvent() {
+export function useLatestRelayEvent(options?: TodayOnlyOptions) {
+  const todayOnly = options?.todayOnly ?? false;
   const [event, setEvent] = useState<RelayLog | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLatest = async () => {
-      const { data, error: e } = await supabase
+      let query = supabase
         .from('relay_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+      if (todayOnly) {
+        query = query.gte('created_at', startOfTodayISO());
+      }
+      const { data, error: e } = await query.maybeSingle();
       if (e) {
         setError(e.message);
         return;
@@ -30,7 +42,9 @@ export function useLatestRelayEvent() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'relay_logs' },
         (payload) => {
-          setEvent(payload.new as RelayLog);
+          const newEvent = payload.new as RelayLog;
+          if (todayOnly && newEvent.created_at < startOfTodayISO()) return;
+          setEvent(newEvent);
         }
       )
       .subscribe((status, err) => {
@@ -42,23 +56,28 @@ export function useLatestRelayEvent() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [todayOnly]);
 
   return { event, error };
 }
 
 /** Live-updating list of recent relay events (for log table). */
-export function useRealtimeRelayLogs(limit = 50) {
+export function useRealtimeRelayLogs(limit = 50, options?: TodayOnlyOptions) {
+  const todayOnly = options?.todayOnly ?? false;
   const [logs, setLogs] = useState<RelayLog[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchInitial = async () => {
-      const { data, error: e } = await supabase
+      let query = supabase
         .from('relay_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(limit);
+      if (todayOnly) {
+        query = query.gte('created_at', startOfTodayISO());
+      }
+      const { data, error: e } = await query;
       if (e) {
         setError(e.message);
         return;
@@ -74,7 +93,9 @@ export function useRealtimeRelayLogs(limit = 50) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'relay_logs' },
         (payload) => {
-          setLogs((prev) => [payload.new as RelayLog, ...prev].slice(0, limit));
+          const newRow = payload.new as RelayLog;
+          if (todayOnly && newRow.created_at < startOfTodayISO()) return;
+          setLogs((prev) => [newRow, ...prev].slice(0, limit));
         }
       )
       .subscribe((status, err) => {
@@ -86,7 +107,7 @@ export function useRealtimeRelayLogs(limit = 50) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [limit]);
+  }, [limit, todayOnly]);
 
   return { logs, error };
 }

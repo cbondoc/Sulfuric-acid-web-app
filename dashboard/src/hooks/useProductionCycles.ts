@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { ProductionCycle } from '../types/relay';
 
-export function useProductionCycles() {
+function startOfTodayISO(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+export function useProductionCycles(options?: { todayOnly?: boolean }) {
+  const todayOnly = options?.todayOnly ?? false;
   const [cycles, setCycles] = useState<ProductionCycle[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -10,10 +17,14 @@ export function useProductionCycles() {
 
   useEffect(() => {
     const fetchCycles = async () => {
-      const { data, error: e } = await supabase
+      let query = supabase
         .from('production_cycles')
         .select('*')
         .order('started_at', { ascending: false });
+      if (todayOnly) {
+        query = query.gte('started_at', startOfTodayISO());
+      }
+      const { data, error: e } = await query;
       if (e) {
         setError(e.message);
         setLoading(false);
@@ -26,7 +37,7 @@ export function useProductionCycles() {
     };
 
     fetchCycles();
-  }, []);
+  }, [todayOnly]);
 
   return { cycles, totalProducts, error, loading };
 }
