@@ -20,7 +20,6 @@ function formatTime(iso: string) {
 /** Build daily production counts for the last 30 days (by finished_at date). */
 function dailyProductionForPastMonth(cycles: ProductionCycle[]): { date: string; count: number; label: string }[] {
   const now = new Date();
-  const dayMs = 24 * 60 * 60 * 1000;
   const days: { date: string; count: number; label: string }[] = [];
 
   for (let i = 29; i >= 0; i--) {
@@ -111,7 +110,7 @@ export function ProductionSummary() {
                       borderRadius: '8px',
                     }}
                     labelStyle={{ color: 'rgb(214 211 209)' }}
-                    formatter={(value: number) => [value, 'Products']}
+                    formatter={(value: number | undefined) => [value ?? 0, 'Products']}
                     labelFormatter={(label) => `Date: ${label}`}
                   />
                   <Area
