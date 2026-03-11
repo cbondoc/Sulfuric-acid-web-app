@@ -1,4 +1,5 @@
 import type { RelayLog, ProductionCycle } from './relay';
+import type { DeviceSettings, DeviceState } from './device';
 
 export type Tables = {
   relay_logs: {
@@ -8,6 +9,16 @@ export type Tables = {
       created_at?: string;
     };
     Update: Partial<RelayLog>;
+  };
+  device_settings: {
+    Row: DeviceSettings;
+    Insert: Partial<DeviceSettings> & { device_id: string };
+    Update: Partial<DeviceSettings>;
+  };
+  device_state: {
+    Row: DeviceState;
+    Insert: Partial<DeviceState> & { device_id: string };
+    Update: Partial<DeviceState>;
   };
 };
 

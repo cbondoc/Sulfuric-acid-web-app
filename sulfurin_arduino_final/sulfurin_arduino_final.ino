@@ -18,17 +18,21 @@ const char* WIFI_SSID     = "bondoc_sala";
 const char* WIFI_PASS     = "carybondoc1234";
 const char SUPABASE_HOST[] = "ijarxjhzseyfqmjqjoul.supabase.co";
 const char SUPABASE_API_KEY[] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqYXJ4amh6c2V5ZnFtanFqb3VsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTUwMDQ3NywiZXhwIjoyMDg3MDc2NDc3fQ.M38PRrrqJQnhhfWiXj0Uzcxr8m8aZjvgvQTLwg3rzYA";
-const char SUPABASE_PATH[] = "/rest/v1/relay_logs";
+const char SUPABASE_RELAY_LOGS_PATH[] = "/rest/v1/relay_logs";
+const char SUPABASE_SETTINGS_PATH[]  = "/rest/v1/device_settings";
+const char SUPABASE_STATE_PATH[]     = "/rest/v1/device_state";
+
+const char DEVICE_ID[] = "arduino_r4_1";
 
 WiFiSSLClient sslClient;
 
 /* ==================== RELAY ==================== */
 int mixerDuration      = 10000;   // Relay 1 (Mixer)
-int containerRestTime  = 30000;   // Relay 2 (Container Rest)
-int containerAcidTime  = 30000;   // Relay 3 (Container Acid)
-int containerWaterTime = 30000;   // Relay 4 (Container Water)
+int containerRestTime  = 110000;   // Relay 2 (Container Rest)
+int containerAcidTime  = 100000;   // Relay 3 (Container Acid)
+int containerWaterTime = 100000;   // Relay 4 (Container Water)
 int pauseBetweenRelays = 1000;
-int restartDelay       = 3000;
+int pollIntervalMs     = 1500;    // How often to poll Supabase for Run/Stop
 
 struct RelayStep {
   int pin;
@@ -46,6 +50,15 @@ RelayStep sequence[] = {
 };
 const int stepCount = sizeof(sequence) / sizeof(sequence[0]);
 int cycleNumber = 0;
+
+struct DeviceSettings {
+  int cyclesRequested;
+  bool runRequested;
+  bool stopRequested;
+  char runId[80]; // UUID or fallback string
+};
+
+char lastHandledRunId[80] = "";
 
 /* ==================== HELPERS ==================== */
 void allOff() {
@@ -80,6 +93,186 @@ void escapeJsonString(const char* in, char* out, size_t outLen) {
   out[j] = '\0';
 }
 
+bool readHttpStatusLine(WiFiSSLClient& c, int& outStatus) {
+  unsigned long start = millis();
+  while (c.connected() && millis() - start < 10000) {
+    if (!c.available()) { delay(10); continue; }
+    String line = c.readStringUntil('\n');
+    line.trim();
+    if (line.startsWith("HTTP/1.1 ")) {
+      outStatus = line.substring(9, 12).toInt();
+      return true;
+    }
+  }
+  return false;
+}
+
+String readHttpBody(WiFiSSLClient& c) {
+  unsigned long start = millis();
+  bool inBody = false;
+  String body = "";
+  while (c.connected() && millis() - start < 10000) {
+    if (!c.available()) { delay(10); continue; }
+    String line = c.readStringUntil('\n');
+    if (!inBody) {
+      if (line == "\r" || line.length() == 0) inBody = true;
+      continue;
+    }
+    body += line;
+  }
+  return body;
+}
+
+bool jsonFindBool(const String& json, const char* key, bool defaultVal) {
+  String needle = String("\"") + key + "\":";
+  int idx = json.indexOf(needle);
+  if (idx < 0) return defaultVal;
+  int v = idx + needle.length();
+  while (v < (int)json.length() && json[v] == ' ') v++;
+  if (json.startsWith("true", v)) return true;
+  if (json.startsWith("false", v)) return false;
+  return defaultVal;
+}
+
+int jsonFindInt(const String& json, const char* key, int defaultVal) {
+  String needle = String("\"") + key + "\":";
+  int idx = json.indexOf(needle);
+  if (idx < 0) return defaultVal;
+  int v = idx + needle.length();
+  while (v < (int)json.length() && json[v] == ' ') v++;
+  int end = v;
+  while (end < (int)json.length() && (json[end] == '-' || (json[end] >= '0' && json[end] <= '9'))) end++;
+  return json.substring(v, end).toInt();
+}
+
+bool jsonFindString(const String& json, const char* key, char* out, size_t outLen) {
+  String needle = String("\"") + key + "\":\"";
+  int idx = json.indexOf(needle);
+  if (idx < 0) return false;
+  int v = idx + needle.length();
+  int end = json.indexOf("\"", v);
+  if (end < 0) return false;
+  String s = json.substring(v, end);
+  s.toCharArray(out, outLen);
+  return true;
+}
+
+bool supabaseGetSettings(DeviceSettings& out) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  if (!sslClient.connect(SUPABASE_HOST, 443)) {
+    Serial.println("Supabase TLS connect failed (GET settings)");
+    return false;
+  }
+
+  String path = String(SUPABASE_SETTINGS_PATH) +
+                "?select=device_id,cycles_requested,run_requested,stop_requested,run_id" +
+                "&device_id=eq." + DEVICE_ID;
+
+  sslClient.println("GET " + path + " HTTP/1.1");
+  sslClient.println("Host: " + String(SUPABASE_HOST));
+  sslClient.println("apikey: " + String(SUPABASE_API_KEY));
+  sslClient.println("Authorization: Bearer " + String(SUPABASE_API_KEY));
+  sslClient.println("Accept: application/json");
+  sslClient.println("Connection: close");
+  sslClient.println();
+
+  int status = 0;
+  if (!readHttpStatusLine(sslClient, status)) {
+    sslClient.stop();
+    Serial.println("Settings GET: no status line");
+    return false;
+  }
+
+  String body = readHttpBody(sslClient);
+  sslClient.stop();
+
+  if (status < 200 || status >= 300) {
+    Serial.print("Settings GET failed: ");
+    Serial.print(status);
+    Serial.print(" body=");
+    Serial.println(body);
+    return false;
+  }
+
+  out.cyclesRequested = jsonFindInt(body, "cycles_requested", 1);
+  if (out.cyclesRequested < 1) out.cyclesRequested = 1;
+  out.runRequested = jsonFindBool(body, "run_requested", false);
+  out.stopRequested = jsonFindBool(body, "stop_requested", false);
+  out.runId[0] = '\0';
+  jsonFindString(body, "run_id", out.runId, sizeof(out.runId));
+  return true;
+}
+
+bool supabasePatchJson(const char* pathWithQuery, const char* jsonBody) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  if (!sslClient.connect(SUPABASE_HOST, 443)) {
+    Serial.println("Supabase TLS connect failed (PATCH)");
+    return false;
+  }
+
+  sslClient.println("PATCH " + String(pathWithQuery) + " HTTP/1.1");
+  sslClient.println("Host: " + String(SUPABASE_HOST));
+  sslClient.println("apikey: " + String(SUPABASE_API_KEY));
+  sslClient.println("Authorization: Bearer " + String(SUPABASE_API_KEY));
+  sslClient.println("Content-Type: application/json");
+  sslClient.println("Prefer: return=minimal");
+  sslClient.print("Content-Length: ");
+  sslClient.println(strlen(jsonBody));
+  sslClient.println("Connection: close");
+  sslClient.println();
+  sslClient.print(jsonBody);
+
+  int status = 0;
+  if (!readHttpStatusLine(sslClient, status)) {
+    sslClient.stop();
+    Serial.println("PATCH: no status line");
+    return false;
+  }
+
+  String body = readHttpBody(sslClient);
+  sslClient.stop();
+
+  if (status < 200 || status >= 300) {
+    Serial.print("PATCH failed: ");
+    Serial.print(status);
+    Serial.print(" body=");
+    Serial.println(body);
+    return false;
+  }
+  return true;
+}
+
+void updateDeviceState(const char* status, const char* activeRunId, int cyclesCompleted, const char* lastError) {
+  char statusEsc[32], runEsc[96], errEsc[192];
+  escapeJsonString(status, statusEsc, sizeof(statusEsc));
+  escapeJsonString(activeRunId ? activeRunId : "", runEsc, sizeof(runEsc));
+  escapeJsonString(lastError ? lastError : "", errEsc, sizeof(errEsc));
+
+  char body[420];
+  if (activeRunId && strlen(activeRunId) > 0) {
+    snprintf(body, sizeof(body),
+             "{\"status\":\"%s\",\"active_run_id\":\"%s\",\"cycles_completed\":%d,\"last_error\":%s}",
+             statusEsc, runEsc, cyclesCompleted,
+             (lastError && strlen(lastError) > 0) ? (String("\"") + errEsc + "\"").c_str() : "null");
+  } else {
+    snprintf(body, sizeof(body),
+             "{\"status\":\"%s\",\"active_run_id\":null,\"cycles_completed\":%d,\"last_error\":%s}",
+             statusEsc, cyclesCompleted,
+             (lastError && strlen(lastError) > 0) ? (String("\"") + errEsc + "\"").c_str() : "null");
+  }
+
+  String path = String(SUPABASE_STATE_PATH) + "?device_id=eq." + DEVICE_ID;
+  supabasePatchJson(path.c_str(), body);
+}
+
+void clearRunCommand() {
+  const char* body = "{\"run_requested\":false,\"stop_requested\":false}";
+  String path = String(SUPABASE_SETTINGS_PATH) + "?device_id=eq." + DEVICE_ID;
+  supabasePatchJson(path.c_str(), body);
+}
+
 /* ==================== SUPABASE (R4 WiFi, blocking POST) ==================== */
 bool logRelayOnToSupabase(const char* batchId, const char* relayName, const char* relayPin,
                           int sequenceIndex, int cycleNum, unsigned long durationMs) {
@@ -100,7 +293,7 @@ bool logRelayOnToSupabase(const char* batchId, const char* relayName, const char
     return false;
   }
 
-  sslClient.println("POST " + String(SUPABASE_PATH) + " HTTP/1.1");
+  sslClient.println("POST " + String(SUPABASE_RELAY_LOGS_PATH) + " HTTP/1.1");
   sslClient.println("Host: " + String(SUPABASE_HOST));
   sslClient.println("apikey: " + String(SUPABASE_API_KEY));
   sslClient.println("Authorization: Bearer " + String(SUPABASE_API_KEY));
@@ -108,6 +301,7 @@ bool logRelayOnToSupabase(const char* batchId, const char* relayName, const char
   sslClient.println("Prefer: return=minimal");
   sslClient.print("Content-Length: ");
   sslClient.println(strlen(body));
+  sslClient.println("Connection: close");
   sslClient.println();
   sslClient.print(body);
 
@@ -159,48 +353,122 @@ void setup() {
 
   connectWiFi();
   delay(500);
+
+  // Supabase settings check on boot
+  DeviceSettings s;
+  if (supabaseGetSettings(s)) {
+    Serial.println("Supabase settings OK:");
+    Serial.print("  cycles_requested="); Serial.println(s.cyclesRequested);
+    Serial.print("  run_requested="); Serial.println(s.runRequested ? "true" : "false");
+    Serial.print("  stop_requested="); Serial.println(s.stopRequested ? "true" : "false");
+    Serial.print("  run_id="); Serial.println(s.runId);
+  } else {
+    Serial.println("Supabase settings check FAILED (will keep retrying).");
+  }
+
+  updateDeviceState("idle", "", 0, "");
 }
 
 /* ==================== LOOP ==================== */
 void loop() {
-  cycleNumber++;
-  char batchId[40];
-  generateBatchId(batchId, sizeof(batchId));
-
-  for (int i = 0; i < stepCount; i++) {
-    for (int r = 0; r < sequence[i].repeat; r++) {
-      allOff();
-
-      Serial.print("ON: ");
-      Serial.print(sequence[i].name);
-      if (sequence[i].repeat > 1) {
-        Serial.print(" (");
-        Serial.print(r + 1);
-        Serial.print("/");
-        Serial.print(sequence[i].repeat);
-        Serial.print(")");
-      }
-      Serial.println();
-
-      unsigned long startTime = millis();
-      digitalWrite(sequence[i].pin, HIGH);
-      delay(sequence[i].duration);
-      digitalWrite(sequence[i].pin, LOW);
-      unsigned long durationMs = millis() - startTime;
-
-      Serial.print("Duration: ");
-      Serial.print(durationMs);
-      Serial.println(" ms");
-
-      logRelayOnToSupabase(batchId, sequence[i].name, sequence[i].pinLabel,
-                           i, cycleNumber, durationMs);
-
-      allOff();
-      delay(pauseBetweenRelays);
-    }
+  DeviceSettings settings;
+  if (!supabaseGetSettings(settings)) {
+    updateDeviceState("offline", "", 0, "settings_fetch_failed");
+    delay(pollIntervalMs);
+    return;
   }
 
-  Serial.println("Sequence complete. Restarting...\n");
+  if (!settings.runRequested) {
+    updateDeviceState("idle", "", 0, "");
+    delay(pollIntervalMs);
+    return;
+  }
+
+  if (strlen(settings.runId) == 0) {
+    Serial.println("Run requested but run_id is empty; ignoring.");
+    updateDeviceState("error", "", 0, "run_id_empty");
+    delay(pollIntervalMs);
+    return;
+  }
+
+  if (strcmp(settings.runId, lastHandledRunId) == 0) {
+    // Already completed this run_id; wait for a new Run press.
+    updateDeviceState("idle", "", 0, "");
+    delay(pollIntervalMs);
+    return;
+  }
+
+  // Start a new run
+  strncpy(lastHandledRunId, settings.runId, sizeof(lastHandledRunId));
+  lastHandledRunId[sizeof(lastHandledRunId) - 1] = '\0';
+
+  Serial.print("Starting run_id=");
+  Serial.print(settings.runId);
+  Serial.print(" cycles=");
+  Serial.println(settings.cyclesRequested);
+
+  updateDeviceState("running", settings.runId, 0, "");
+
+  int completed = 0;
+  for (int c = 1; c <= settings.cyclesRequested; c++) {
+    // Stop request check before each cycle boundary
+    DeviceSettings check;
+    if (supabaseGetSettings(check) && check.stopRequested) {
+      Serial.println("Stop requested. Stopping now (cycle boundary).");
+      updateDeviceState("stopping", settings.runId, completed, "");
+      break;
+    }
+
+    Serial.print("=== Cycle ");
+    Serial.print(c);
+    Serial.print("/");
+    Serial.print(settings.cyclesRequested);
+    Serial.println(" ===");
+
+    cycleNumber++;
+    char batchId[40];
+    generateBatchId(batchId, sizeof(batchId));
+
+    for (int i = 0; i < stepCount; i++) {
+      for (int r = 0; r < sequence[i].repeat; r++) {
+        allOff();
+
+        Serial.print("ON: ");
+        Serial.print(sequence[i].name);
+        if (sequence[i].repeat > 1) {
+          Serial.print(" (");
+          Serial.print(r + 1);
+          Serial.print("/");
+          Serial.print(sequence[i].repeat);
+          Serial.print(")");
+        }
+        Serial.println();
+
+        unsigned long startTime = millis();
+        digitalWrite(sequence[i].pin, HIGH);
+        delay(sequence[i].duration);
+        digitalWrite(sequence[i].pin, LOW);
+        unsigned long durationMs = millis() - startTime;
+
+        Serial.print("Duration: ");
+        Serial.print(durationMs);
+        Serial.println(" ms");
+
+        logRelayOnToSupabase(batchId, sequence[i].name, sequence[i].pinLabel,
+                             i, c, durationMs);
+
+        allOff();
+        delay(pauseBetweenRelays);
+      }
+    }
+
+    completed = c;
+    updateDeviceState("running", settings.runId, completed, "");
+  }
+
+  Serial.println("Run complete. Going idle; waiting for next Run press.\n");
   allOff();
-  delay(restartDelay);
+  clearRunCommand();
+  updateDeviceState("idle", "", 0, "");
+  delay(pollIntervalMs);
 }

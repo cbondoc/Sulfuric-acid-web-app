@@ -51,7 +51,9 @@ export function ProcessInfo() {
             <li>Sulfuric acid is corrosive. Use appropriate PPE and handling procedures.</li>
             <li>Always add acid to water, not water to concentrated acid.</li>
             <li>Ensure ventilation and spill containment where applicable.</li>
-            <li>This dashboard is for monitoring only; it does not control the physical process.</li>
+            <li>
+              This dashboard can send start/stop commands. Verify the area is safe before pressing Run.
+            </li>
           </ul>
         </section>
 

@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 
 const nav = [
   { to: '/', label: 'Live Status' },
+  { to: '/control', label: 'Control' },
   { to: '/production', label: 'Production Summary' },
   { to: '/process', label: 'Process Info' },
 ];
