@@ -67,6 +67,40 @@ void allOff() {
   Serial.println("All relays OFF");
 }
 
+bool shouldStop() {
+  DeviceSettings s;
+  if (!supabaseGetSettings(s)) return false; // treat fetch errors as "no stop" to avoid false trips
+  return s.stopRequested;
+}
+
+bool shouldStopVerbose(const char* where) {
+  Serial.print("[Supabase StopCheck] ");
+  Serial.print(where);
+  Serial.print(" -> fetching... ");
+
+  DeviceSettings s;
+  if (!supabaseGetSettings(s)) {
+    Serial.println("FAILED");
+    return false;
+  }
+
+  Serial.print("ok stop_requested=");
+  Serial.println(s.stopRequested ? "true" : "false");
+  return s.stopRequested;
+}
+
+// Delay in small chunks so we can react quickly to Stop.
+bool delayWithStopCheck(const char* where, unsigned long totalMs, unsigned long checkEveryMs = 500) {
+  unsigned long start = millis();
+  while (millis() - start < totalMs) {
+    if (shouldStopVerbose(where)) return false;
+    unsigned long remaining = totalMs - (millis() - start);
+    unsigned long slice = remaining < checkEveryMs ? remaining : checkEveryMs;
+    delay(slice);
+  }
+  return true;
+}
+
 // UUID v4–like string for batch_id (min 37 bytes)
 void generateBatchId(char* buf, size_t len) {
   if (len < 37) return;
@@ -159,6 +193,9 @@ bool jsonFindString(const String& json, const char* key, char* out, size_t outLe
 
 bool supabaseGetSettings(DeviceSettings& out) {
   if (WiFi.status() != WL_CONNECTED) return false;
+
+  // Ensure any previous connection is closed before reconnect.
+  sslClient.stop();
 
   if (!sslClient.connect(SUPABASE_HOST, 443)) {
     Serial.println("Supabase TLS connect failed (GET settings)");
@@ -410,12 +447,14 @@ void loop() {
   updateDeviceState("running", settings.runId, 0, "");
 
   int completed = 0;
+  bool stoppedEarly = false;
   for (int c = 1; c <= settings.cyclesRequested; c++) {
     // Stop request check before each cycle boundary
     DeviceSettings check;
     if (supabaseGetSettings(check) && check.stopRequested) {
       Serial.println("Stop requested. Stopping now (cycle boundary).");
       updateDeviceState("stopping", settings.runId, completed, "");
+      stoppedEarly = true;
       break;
     }
 
@@ -431,6 +470,14 @@ void loop() {
 
     for (int i = 0; i < stepCount; i++) {
       for (int r = 0; r < sequence[i].repeat; r++) {
+        // Stop request check before each relay step (acid/water/mix/rest)
+        if (shouldStopVerbose("before step")) {
+          Serial.println("Stop requested. Stopping now (step boundary).");
+          updateDeviceState("stopping", settings.runId, completed, "");
+          stoppedEarly = true;
+          break;
+        }
+
         allOff();
 
         Serial.print("ON: ");
@@ -446,9 +493,17 @@ void loop() {
 
         unsigned long startTime = millis();
         digitalWrite(sequence[i].pin, HIGH);
-        delay(sequence[i].duration);
+        bool ok = delayWithStopCheck(sequence[i].name, sequence[i].duration, 500);
         digitalWrite(sequence[i].pin, LOW);
         unsigned long durationMs = millis() - startTime;
+
+        if (!ok) {
+          Serial.println("Stop requested. Turning relay OFF immediately.");
+          updateDeviceState("stopping", settings.runId, completed, "");
+          stoppedEarly = true;
+          allOff();
+          break;
+        }
 
         Serial.print("Duration: ");
         Serial.print(durationMs);
@@ -458,15 +513,23 @@ void loop() {
                              i, c, durationMs);
 
         allOff();
-        delay(pauseBetweenRelays);
+        if (!delayWithStopCheck("pause", pauseBetweenRelays, 250)) {
+          Serial.println("Stop requested during pause. Stopping.");
+          updateDeviceState("stopping", settings.runId, completed, "");
+          stoppedEarly = true;
+          break;
+        }
       }
+      if (stoppedEarly) break;
     }
+    if (stoppedEarly) break;
 
     completed = c;
     updateDeviceState("running", settings.runId, completed, "");
   }
 
-  Serial.println("Run complete. Going idle; waiting for next Run press.\n");
+  Serial.println(stoppedEarly ? "Stopped. Going idle; waiting for next Run press.\n"
+                              : "Run complete. Going idle; waiting for next Run press.\n");
   allOff();
   clearRunCommand();
   updateDeviceState("idle", "", 0, "");
