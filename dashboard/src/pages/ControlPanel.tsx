@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { DeviceSettings, DeviceState } from '../types/device';
 
@@ -14,10 +14,40 @@ export function ControlPanel() {
   const [state, setState] = useState<DeviceState | null>(null);
   const [cycles, setCycles] = useState<number>(1);
   const [busy, setBusy] = useState(false);
+  const [countdown, setCountdown] = useState<number>(0);
+  const [countdownLabel, setCountdownLabel] = useState<'Run' | 'Stop' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const countdownTimerRef = useRef<number | null>(null);
 
-  const canRun = useMemo(() => !busy && cycles >= 1 && cycles <= 999, [busy, cycles]);
+  const canRun = useMemo(
+    () => !busy && countdown === 0 && cycles >= 1 && cycles <= 999,
+    [busy, countdown, cycles]
+  );
+  const controlsDisabled = busy;
+
+  function startCountdown(label: 'Run' | 'Stop', seconds = 10) {
+    if (countdownTimerRef.current) {
+      window.clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+
+    setCountdownLabel(label);
+    setCountdown(seconds);
+    countdownTimerRef.current = window.setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownTimerRef.current) {
+            window.clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
+          }
+          setCountdownLabel(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +85,11 @@ export function ControlPanel() {
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
+      if (countdownTimerRef.current) {
+        window.clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+      setCountdownLabel(null);
     };
   }, []);
 
@@ -86,6 +121,7 @@ export function ControlPanel() {
     setBusy(true);
     setInfo(null);
     setError(null);
+    startCountdown('Run', 10);
     try {
       const run_id = newRunId();
       const { data, error: e } = await supabase
@@ -117,6 +153,7 @@ export function ControlPanel() {
     setBusy(true);
     setInfo(null);
     setError(null);
+    startCountdown('Stop', 10);
     try {
       const { data, error: e } = await supabase
         .from('device_settings')
@@ -143,6 +180,57 @@ export function ControlPanel() {
 
   return (
     <div className="space-y-8">
+      {countdown > 0 && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-stone-950/80 px-4 py-6 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Sending command countdown"
+        >
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-amber-900/40 bg-stone-950 shadow-2xl shadow-black/60">
+            <div className="border-b border-stone-800 bg-linear-to-b from-amber-500/10 to-transparent px-6 py-5">
+              <p className="text-xs font-medium uppercase tracking-wider text-stone-400">
+                Sending command
+              </p>
+              <h3 className="mt-1 text-2xl font-semibold text-stone-100 sm:text-3xl">
+                {countdownLabel ?? 'Run'} in{' '}
+                <span className="text-amber-400">{countdown}s</span>
+              </h3>
+              <p className="mt-2 text-sm text-stone-400">
+                Please wait while the command is propagated to the device.
+              </p>
+            </div>
+
+            <div className="px-6 py-6">
+              <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div className="order-2 sm:order-1">
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-stone-800">
+                    <div className="h-full origin-left bg-linear-to-r from-amber-500 to-amber-300 motion-safe:animate-[countdown_10s_linear_forwards]" />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-stone-500">
+                    <span>0s</span>
+                    <span>10s</span>
+                  </div>
+                </div>
+
+                <div className="order-1 sm:order-2 flex justify-center">
+                  <div className="relative grid h-28 w-28 place-items-center rounded-full border border-amber-900/40 bg-amber-500/10 sm:h-32 sm:w-32">
+                    <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-stone-800" />
+                    <div className="h-24 w-24 rounded-full bg-stone-950/60 sm:h-28 sm:w-28" />
+                    <div className="absolute text-3xl font-bold tracking-tight text-amber-300 sm:text-4xl">
+                      {countdown}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="mt-6 text-center text-sm text-stone-500">
+                Controls are temporarily locked to avoid double-sending.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <div>
         <h2 className="text-xl font-semibold text-stone-100">Control Panel</h2>
         <p className="text-sm text-stone-500">Set cycles then press Run to start the Arduino.</p>
@@ -176,6 +264,7 @@ export function ControlPanel() {
               type="number"
               min={1}
               max={999}
+              disabled={controlsDisabled || countdown > 0}
               className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
             />
             <p className="mt-2 text-xs text-stone-600">
@@ -186,7 +275,7 @@ export function ControlPanel() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={saveCyclesOnly}
-              disabled={busy}
+              disabled={controlsDisabled}
               className="rounded-lg border border-stone-700 bg-stone-800/40 px-4 py-2 text-sm font-medium text-stone-200 hover:bg-stone-800 disabled:opacity-50"
             >
               Save
@@ -200,7 +289,7 @@ export function ControlPanel() {
             </button>
             <button
               onClick={stop}
-              disabled={busy}
+              disabled={controlsDisabled || countdown > 0}
               className="rounded-lg border border-red-900/40 bg-red-950/20 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-50"
             >
               Stop
