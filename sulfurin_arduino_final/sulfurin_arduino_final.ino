@@ -14,8 +14,8 @@
 #include <WiFiS3.h>
 
 /* ==================== WIFI / SUPABASE ==================== */
-const char* WIFI_SSID     = "bondoc_sala";
-const char* WIFI_PASS     = "carybondoc1234";
+const char* WIFI_SSID     = "sulfuric";
+const char* WIFI_PASS     = "12345678";
 const char SUPABASE_HOST[] = "ijarxjhzseyfqmjqjoul.supabase.co";
 const char SUPABASE_API_KEY[] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqYXJ4amh6c2V5ZnFtanFqb3VsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTUwMDQ3NywiZXhwIjoyMDg3MDc2NDc3fQ.M38PRrrqJQnhhfWiXj0Uzcxr8m8aZjvgvQTLwg3rzYA";
 const char SUPABASE_RELAY_LOGS_PATH[] = "/rest/v1/relay_logs";
