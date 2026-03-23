@@ -1,5 +1,5 @@
--- Clear all Sulfuric dashboard tables/views (safe re-run)
--- Run this FIRST if you want to wipe everything.
+-- Wipe Sulfuric dashboard objects (safe re-run). Recreate with `schema.sql`.
+-- Order: realtime publication → view (depends on relay_logs) → tables.
 
 begin;
 

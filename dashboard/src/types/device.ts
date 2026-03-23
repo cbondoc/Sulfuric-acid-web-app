@@ -4,6 +4,10 @@ export interface DeviceSettings {
   run_requested: boolean;
   stop_requested: boolean;
   run_id: string | null;
+  mixer_duration_ms: number;
+  container_rest_duration_ms: number;
+  container_acid_duration_ms: number;
+  container_water_duration_ms: number;
   updated_at: string;
 }
 

@@ -56,9 +56,27 @@ struct DeviceSettings {
   bool runRequested;
   bool stopRequested;
   char runId[80]; // UUID or fallback string
+  int mixerDurationMs;
+  int containerRestDurationMs;
+  int containerAcidDurationMs;
+  int containerWaterDurationMs;
 };
 
 char lastHandledRunId[80] = "";
+
+static int clampDurationMs(int v) {
+  if (v < 100) return 100;
+  if (v > 86400000L) return 86400000;
+  return v;
+}
+
+// sequence order: acid → water → mixer → rest (x2)
+void applySequenceDurations(const DeviceSettings& s) {
+  sequence[0].duration = (unsigned long)s.containerAcidDurationMs;
+  sequence[1].duration = (unsigned long)s.containerWaterDurationMs;
+  sequence[2].duration = (unsigned long)s.mixerDurationMs;
+  sequence[3].duration = (unsigned long)s.containerRestDurationMs;
+}
 
 /* ==================== HELPERS ==================== */
 void allOff() {
@@ -203,7 +221,8 @@ bool supabaseGetSettings(DeviceSettings& out) {
   }
 
   String path = String(SUPABASE_SETTINGS_PATH) +
-                "?select=device_id,cycles_requested,run_requested,stop_requested,run_id" +
+                "?select=device_id,cycles_requested,run_requested,stop_requested,run_id,"
+                "mixer_duration_ms,container_rest_duration_ms,container_acid_duration_ms,container_water_duration_ms" +
                 "&device_id=eq." + DEVICE_ID;
 
   sslClient.println("GET " + path + " HTTP/1.1");
@@ -238,6 +257,10 @@ bool supabaseGetSettings(DeviceSettings& out) {
   out.stopRequested = jsonFindBool(body, "stop_requested", false);
   out.runId[0] = '\0';
   jsonFindString(body, "run_id", out.runId, sizeof(out.runId));
+  out.mixerDurationMs = clampDurationMs(jsonFindInt(body, "mixer_duration_ms", mixerDuration));
+  out.containerRestDurationMs = clampDurationMs(jsonFindInt(body, "container_rest_duration_ms", containerRestTime));
+  out.containerAcidDurationMs = clampDurationMs(jsonFindInt(body, "container_acid_duration_ms", containerAcidTime));
+  out.containerWaterDurationMs = clampDurationMs(jsonFindInt(body, "container_water_duration_ms", containerWaterTime));
   return true;
 }
 
@@ -399,6 +422,10 @@ void setup() {
     Serial.print("  run_requested="); Serial.println(s.runRequested ? "true" : "false");
     Serial.print("  stop_requested="); Serial.println(s.stopRequested ? "true" : "false");
     Serial.print("  run_id="); Serial.println(s.runId);
+    Serial.print("  mixer_duration_ms="); Serial.println(s.mixerDurationMs);
+    Serial.print("  container_rest_duration_ms="); Serial.println(s.containerRestDurationMs);
+    Serial.print("  container_acid_duration_ms="); Serial.println(s.containerAcidDurationMs);
+    Serial.print("  container_water_duration_ms="); Serial.println(s.containerWaterDurationMs);
   } else {
     Serial.println("Supabase settings check FAILED (will keep retrying).");
   }
@@ -443,6 +470,8 @@ void loop() {
   Serial.print(settings.runId);
   Serial.print(" cycles=");
   Serial.println(settings.cyclesRequested);
+
+  applySequenceDurations(settings);
 
   updateDeviceState("running", settings.runId, 0, "");
 

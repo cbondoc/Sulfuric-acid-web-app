@@ -4,6 +4,40 @@ import type { DeviceSettings, DeviceState } from '../types/device';
 
 const DEVICE_ID = 'arduino_r4_1';
 
+function clampDurationSec(n: number): number {
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(86400, Math.floor(n)));
+}
+
+/**
+ * Default relay ON times in seconds (text) — match `sulfurin_arduino_final.ino` ms globals.
+ * Acid 100000 ms, water 100000 ms, mixer 10000 ms, rest 110000 ms.
+ */
+const DEFAULT_RELAY_DURATION_SEC = {
+  acid: '100',
+  water: '100',
+  mixer: '10',
+  rest: '110',
+} as const;
+
+function defaultRelayDurationMs(kind: keyof typeof DEFAULT_RELAY_DURATION_SEC): number {
+  return clampDurationSec(Number(DEFAULT_RELAY_DURATION_SEC[kind])) * 1000;
+}
+
+/** Convert stored ms → whole seconds for the form (UI is always seconds). */
+function durationMsToInputSeconds(ms: number): number {
+  return clampDurationSec(Math.round(ms / 1000));
+}
+
+function durationPayloadFromSeconds(mixerSec: number, restSec: number, acidSec: number, waterSec: number) {
+  return {
+    mixer_duration_ms: clampDurationSec(mixerSec) * 1000,
+    container_rest_duration_ms: clampDurationSec(restSec) * 1000,
+    container_acid_duration_ms: clampDurationSec(acidSec) * 1000,
+    container_water_duration_ms: clampDurationSec(waterSec) * 1000,
+  };
+}
+
 function newRunId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -13,6 +47,10 @@ export function ControlPanel() {
   const [settings, setSettings] = useState<DeviceSettings | null>(null);
   const [state, setState] = useState<DeviceState | null>(null);
   const [cycles, setCycles] = useState<number>(1);
+  const [mixerSec, setMixerSec] = useState(() => durationMsToInputSeconds(defaultRelayDurationMs('mixer')));
+  const [restSec, setRestSec] = useState(() => durationMsToInputSeconds(defaultRelayDurationMs('rest')));
+  const [acidSec, setAcidSec] = useState(() => durationMsToInputSeconds(defaultRelayDurationMs('acid')));
+  const [waterSec, setWaterSec] = useState(() => durationMsToInputSeconds(defaultRelayDurationMs('water')));
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState<number>(0);
   const [countdownLabel, setCountdownLabel] = useState<'Run' | 'Stop' | null>(null);
@@ -69,6 +107,18 @@ export function ControlPanel() {
       setSettings(settingsRow);
       setState(stateRow);
       if (settingsRow?.cycles_requested) setCycles(settingsRow.cycles_requested);
+      setMixerSec(
+        durationMsToInputSeconds(settingsRow?.mixer_duration_ms ?? defaultRelayDurationMs('mixer'))
+      );
+      setRestSec(
+        durationMsToInputSeconds(settingsRow?.container_rest_duration_ms ?? defaultRelayDurationMs('rest'))
+      );
+      setAcidSec(
+        durationMsToInputSeconds(settingsRow?.container_acid_duration_ms ?? defaultRelayDurationMs('acid'))
+      );
+      setWaterSec(
+        durationMsToInputSeconds(settingsRow?.container_water_duration_ms ?? defaultRelayDurationMs('water'))
+      );
     }
 
     load();
@@ -93,7 +143,7 @@ export function ControlPanel() {
     };
   }, []);
 
-  async function saveCyclesOnly() {
+  async function saveSettings() {
     setBusy(true);
     setInfo(null);
     setError(null);
@@ -101,16 +151,21 @@ export function ControlPanel() {
       const { data, error: e } = await supabase
         .from('device_settings')
         .upsert(
-          { device_id: DEVICE_ID, cycles_requested: cycles, updated_at: new Date().toISOString() },
+          {
+            device_id: DEVICE_ID,
+            cycles_requested: cycles,
+            ...durationPayloadFromSeconds(mixerSec, restSec, acidSec, waterSec),
+            updated_at: new Date().toISOString(),
+          },
           { onConflict: 'device_id' }
         )
         .select('*')
         .maybeSingle();
       if (e) throw e;
       setSettings((data as DeviceSettings | null) ?? null);
-      setInfo('Saved cycles.');
+      setInfo('Saved settings.');
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to save cycles');
+      setError(e?.message ?? 'Failed to save settings');
     } finally {
       setBusy(false);
     }
@@ -130,6 +185,7 @@ export function ControlPanel() {
           {
             device_id: DEVICE_ID,
             cycles_requested: cycles,
+            ...durationPayloadFromSeconds(mixerSec, restSec, acidSec, waterSec),
             run_requested: true,
             stop_requested: false,
             run_id,
@@ -249,7 +305,90 @@ export function ControlPanel() {
       )}
 
       <section className="rounded-xl border border-stone-800 bg-stone-900/30 p-6">
-        <div className="flex flex-wrap items-end gap-4">
+        <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-stone-500">
+          Relay ON time
+        </h3>
+        <p className="mb-4 text-xs text-stone-600">
+          Enter <span className="text-stone-400">seconds</span> here. They are saved to Supabase and sent to the
+          device as <span className="text-stone-400">milliseconds</span>. Default seconds are shown under each
+          field. Order on the device: acid → water → mixer → rest (rest runs twice).
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label htmlFor="dur-acid" className="block text-xs font-medium text-stone-500">
+              Container acid (s)
+            </label>
+            <input
+              id="dur-acid"
+              type="number"
+              min={1}
+              max={86400}
+              value={acidSec}
+              onChange={(e) => setAcidSec(clampDurationSec(Number(e.target.value)))}
+              disabled={controlsDisabled || countdown > 0}
+              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+            />
+            <p className="mt-1 text-xs text-stone-600">
+              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.acid}</span> s
+            </p>
+          </div>
+          <div>
+            <label htmlFor="dur-water" className="block text-xs font-medium text-stone-500">
+              Container water (s)
+            </label>
+            <input
+              id="dur-water"
+              type="number"
+              min={1}
+              max={86400}
+              value={waterSec}
+              onChange={(e) => setWaterSec(clampDurationSec(Number(e.target.value)))}
+              disabled={controlsDisabled || countdown > 0}
+              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+            />
+            <p className="mt-1 text-xs text-stone-600">
+              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.water}</span> s
+            </p>
+          </div>
+          <div>
+            <label htmlFor="dur-mixer" className="block text-xs font-medium text-stone-500">
+              Mixer (s)
+            </label>
+            <input
+              id="dur-mixer"
+              type="number"
+              min={1}
+              max={86400}
+              value={mixerSec}
+              onChange={(e) => setMixerSec(clampDurationSec(Number(e.target.value)))}
+              disabled={controlsDisabled || countdown > 0}
+              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+            />
+            <p className="mt-1 text-xs text-stone-600">
+              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.mixer}</span> s
+            </p>
+          </div>
+          <div>
+            <label htmlFor="dur-rest" className="block text-xs font-medium text-stone-500">
+              Container rest (s)
+            </label>
+            <input
+              id="dur-rest"
+              type="number"
+              min={1}
+              max={86400}
+              value={restSec}
+              onChange={(e) => setRestSec(clampDurationSec(Number(e.target.value)))}
+              disabled={controlsDisabled || countdown > 0}
+              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+            />
+            <p className="mt-1 text-xs text-stone-600">
+              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.rest}</span> s
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-end gap-4 border-t border-stone-800 pt-6">
           <div className="min-w-[240px]">
             <label
               htmlFor="cycles-per-run"
@@ -274,7 +413,7 @@ export function ControlPanel() {
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={saveCyclesOnly}
+              onClick={saveSettings}
               disabled={controlsDisabled}
               className="rounded-lg border border-stone-700 bg-stone-800/40 px-4 py-2 text-sm font-medium text-stone-200 hover:bg-stone-800 disabled:opacity-50"
             >

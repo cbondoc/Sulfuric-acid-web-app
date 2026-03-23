@@ -1,5 +1,7 @@
 -- Sulfuric Acid Mixing System - Supabase Schema
--- Run this in Supabase SQL Editor to create tables and view.
+--
+-- Fresh install: run `clear.sql` first (optional wipe), then this file in the SQL Editor.
+-- All relay duration defaults (ms) match `sulfurin_arduino_final.ino` and the dashboard.
 
 -- Extensions used by this schema
 create extension if not exists pgcrypto;
@@ -51,6 +53,11 @@ create table if not exists device_settings (
   run_requested boolean not null default false,
   stop_requested boolean not null default false,
   run_id uuid,
+  -- Relay ON durations (ms); Arduino applies these each run (sequence: acid → water → mixer → rest x2)
+  mixer_duration_ms int not null default 10000 check (mixer_duration_ms between 100 and 86400000),
+  container_rest_duration_ms int not null default 110000 check (container_rest_duration_ms between 100 and 86400000),
+  container_acid_duration_ms int not null default 100000 check (container_acid_duration_ms between 100 and 86400000),
+  container_water_duration_ms int not null default 100000 check (container_water_duration_ms between 100 and 86400000),
   updated_at timestamptz not null default now()
 );
 
@@ -137,8 +144,26 @@ create policy "Allow public update on device_state"
   with check (true);
 
 -- Seed a default device row (change device_id as needed)
-insert into device_settings (device_id, cycles_requested, run_requested, stop_requested)
-values ('arduino_r4_1', 1, false, false)
+insert into device_settings (
+  device_id,
+  cycles_requested,
+  run_requested,
+  stop_requested,
+  mixer_duration_ms,
+  container_rest_duration_ms,
+  container_acid_duration_ms,
+  container_water_duration_ms
+)
+values (
+  'arduino_r4_1',
+  1,
+  false,
+  false,
+  10000,
+  110000,
+  100000,
+  100000
+)
 on conflict (device_id) do update set updated_at = now();
 
 insert into device_state (device_id, status, cycles_completed)
