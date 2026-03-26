@@ -6,9 +6,11 @@
 // A1 → Relay 2 → Container Rest
 // A2 → Relay 3 → Container Acid
 // A3 → Relay 4 → Container Water
+// A4 → Hydrometer (raw < HYDRO_ALARM_BELOW → stop + buzzer on D2 + dashboard)
+// A5 → TDS analog module   D2 → Buzzer (alarm when hydrometer low)
 //
 // 1. Set WIFI_SSID, WIFI_PASS, SUPABASE_HOST, SUPABASE_API_KEY below.
-// 2. Run supabase/schema.sql in your Supabase project.
+// 2. Supabase: run supabase/clear.sql then supabase/schema.sql (only those two).
 // 3. Board: Arduino Uno R4 WiFi. Upload and open Serial Monitor (115200).
 
 #include <WiFiS3.h>
@@ -78,7 +80,48 @@ void applySequenceDurations(const DeviceSettings& s) {
   sequence[3].duration = (unsigned long)s.containerRestDurationMs;
 }
 
+/* ==================== SENSORS + BUZZER ==================== */
+const int PIN_HYDROMETER = A4;
+const int PIN_TDS = A5;
+const int PIN_BUZZER = 2;
+const int HYDRO_ALARM_BELOW = 200;
+const float ADC_VREF = 5.0f;
+const int ADC_MAX_VAL = 1023;
+
+const unsigned ALARM_BEEP_HZ = 1000;
+
+/** DFRobot-style “ppm” (~mg/L at ~25 °C). */
+float tdsFromVoltage(float volts) {
+  if (volts < 0.01f) return 0.0f;
+  return (133.42f * volts * volts * volts
+        - 255.86f * volts * volts
+        + 857.39f * volts) * 0.5f;
+}
+
+/** ppm (as mg/L) → g/mL */
+static inline float tdsPpmToGPerMl(float ppmMgPerL) {
+  return ppmMgPerL * 1.0e-6f;
+}
+
+void serviceBuzzerAlarm(bool hydroLow) {
+  static bool buzzing = false;
+  if (!hydroLow) {
+    if (buzzing) {
+      noTone(PIN_BUZZER);
+      digitalWrite(PIN_BUZZER, LOW);
+      buzzing = false;
+    }
+    return;
+  }
+  if (!buzzing) {
+    tone(PIN_BUZZER, ALARM_BEEP_HZ);
+    buzzing = true;
+  }
+}
+
 /* ==================== HELPERS ==================== */
+void serviceSensorsSupabase(int hydroRaw, int tdsRaw);  // defined later; used during relay delays
+
 void allOff() {
   for (int i = 0; i < stepCount; i++)
     digitalWrite(sequence[i].pin, LOW);
@@ -111,6 +154,11 @@ bool shouldStopVerbose(const char* where) {
 bool delayWithStopCheck(const char* where, unsigned long totalMs, unsigned long checkEveryMs = 500) {
   unsigned long start = millis();
   while (millis() - start < totalMs) {
+    int hydroRaw = analogRead(PIN_HYDROMETER);
+    int tdsRaw = analogRead(PIN_TDS);
+    if (WiFi.status() == WL_CONNECTED)
+      serviceSensorsSupabase(hydroRaw, tdsRaw);
+    serviceBuzzerAlarm(hydroRaw < HYDRO_ALARM_BELOW);
     if (shouldStopVerbose(where)) return false;
     unsigned long remaining = totalMs - (millis() - start);
     unsigned long slice = remaining < checkEveryMs ? remaining : checkEveryMs;
@@ -333,6 +381,70 @@ void clearRunCommand() {
   supabasePatchJson(path.c_str(), body);
 }
 
+/* ==================== SENSORS → device_state + HYDRO STOP ==================== */
+/** device_state telemetry interval (dashboard); throttled inside serviceSensorsSupabase */
+const unsigned long SENSOR_STATE_INTERVAL_MS = 5000;
+/** How often to PATCH stop_requested while hydrometer is low (keep short during pump runs) */
+const unsigned long HYDRO_STOP_PATCH_INTERVAL_MS = 1000;
+
+static unsigned long lastSensorStatePost = 0;
+static unsigned long lastHydrometerStopPatch = 0;
+static bool prevHydroLow = false;
+
+bool patchDeviceStateSensors(int hydroRaw, bool hydroLow, int tdsRaw, float tdsGPerMl) {
+  char body[320];
+  snprintf(body, sizeof(body),
+           "{\"hydrometer_raw\":%d,\"hydrometer_low\":%s,"
+           "\"tds_analog_raw\":%d,\"tds_g_per_ml\":%.8f,"
+           "\"buzzer_alarm\":%s}",
+           hydroRaw, hydroLow ? "true" : "false",
+           tdsRaw, (double)tdsGPerMl,
+           hydroLow ? "true" : "false");
+  String path = String(SUPABASE_STATE_PATH) + "?device_id=eq." + DEVICE_ID;
+  return supabasePatchJson(path.c_str(), body);
+}
+
+bool requestStopFromHydrometer() {
+  const char* body = "{\"stop_requested\":true,\"run_requested\":false}";
+  String path = String(SUPABASE_SETTINGS_PATH) + "?device_id=eq." + DEVICE_ID;
+  return supabasePatchJson(path.c_str(), body);
+}
+
+void serviceSensorsSupabase(int hydroRaw, int tdsRaw) {
+  unsigned long now = millis();
+  bool low = hydroRaw < HYDRO_ALARM_BELOW;
+  float vT = tdsRaw * (ADC_VREF / (float)ADC_MAX_VAL);
+  float tdsGPerMl = tdsPpmToGPerMl(tdsFromVoltage(vT));
+
+  bool hydroLowEdge = (low != prevHydroLow);
+  prevHydroLow = low;
+
+  bool periodicTelemetry = (now - lastSensorStatePost >= SENSOR_STATE_INTERVAL_MS);
+
+  bool hydroStopRetrigger = false;
+  if (low && (now - lastHydrometerStopPatch >= HYDRO_STOP_PATCH_INTERVAL_MS)) {
+    lastHydrometerStopPatch = now;
+    hydroStopRetrigger = true;
+  }
+
+  // One PATCH always carries hydrometer + TDS together (dashboard stays in sync).
+  if (periodicTelemetry || hydroLowEdge || hydroStopRetrigger) {
+    lastSensorStatePost = now;
+    if (!patchDeviceStateSensors(hydroRaw, low, tdsRaw, tdsGPerMl))
+      Serial.println("[Sensors] device_state PATCH failed");
+  }
+
+  if (hydroStopRetrigger) {
+    if (requestStopFromHydrometer()) {
+      Serial.print("[Hydrometer] LOW raw=");
+      Serial.print(hydroRaw);
+      Serial.println(" -> stop_requested=true");
+    } else {
+      Serial.println("[Hydrometer] stop PATCH failed");
+    }
+  }
+}
+
 /* ==================== SUPABASE (R4 WiFi, blocking POST) ==================== */
 bool logRelayOnToSupabase(const char* batchId, const char* relayName, const char* relayPin,
                           int sequenceIndex, int cycleNum, unsigned long durationMs) {
@@ -409,10 +521,15 @@ void setup() {
     pinMode(sequence[i].pin, OUTPUT);
     digitalWrite(sequence[i].pin, LOW);
   }
-  randomSeed(analogRead(A4));  // A4 unconnected for entropy
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, LOW);
+  noTone(PIN_BUZZER);
+
+  randomSeed(micros() ^ (unsigned)millis());
 
   connectWiFi();
   delay(500);
+  lastSensorStatePost = millis() - SENSOR_STATE_INTERVAL_MS;
 
   // Supabase settings check on boot
   DeviceSettings s;
@@ -435,6 +552,12 @@ void setup() {
 
 /* ==================== LOOP ==================== */
 void loop() {
+  int hydroRaw = analogRead(PIN_HYDROMETER);
+  int tdsRaw = analogRead(PIN_TDS);
+  if (WiFi.status() == WL_CONNECTED)
+    serviceSensorsSupabase(hydroRaw, tdsRaw);
+  serviceBuzzerAlarm(hydroRaw < HYDRO_ALARM_BELOW);
+
   DeviceSettings settings;
   if (!supabaseGetSettings(settings)) {
     updateDeviceState("offline", "", 0, "settings_fetch_failed");

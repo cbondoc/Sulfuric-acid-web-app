@@ -246,7 +246,7 @@ void loop() {
   int rawT = analogRead(PIN_TDS);
   float vH = rawH * (VREF / (float)ADC_MAX);
   float vT = rawT * (VREF / (float)ADC_MAX);
-  float tdsPpm = tdsFromVoltage(vT);
+  float tdsGPerMl = tdsFromVoltage(vT) * 1.0e-6f;
 
   const bool hydroLow = rawH < HYDRO_ALARM_BELOW;
   if (hydroLow) {
@@ -271,8 +271,8 @@ void loop() {
     Serial.print(rawT);
     Serial.print(F("  V="));
     Serial.print(vT, 3);
-    Serial.print(F("  ~TDS="));
-    Serial.print(tdsPpm, 1);
-    Serial.println(F(" ppm (approx @ 25°C, calibrate!)"));
+    Serial.print(F("  TDS="));
+    Serial.print(tdsGPerMl, 6);
+    Serial.println(F(" g/mL (ppm as mg/L * 1e-6, ~25C)"));
   }
 }

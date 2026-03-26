@@ -458,6 +458,67 @@ export function ControlPanel() {
               Active run: {state?.active_run_id ? `${state.active_run_id.slice(0, 8)}…` : '—'}
             </p>
           </div>
+          <div
+            className={`rounded-lg border p-4 ${
+              state?.hydrometer_low === true
+                ? 'border-red-900/50 bg-red-950/25'
+                : 'border-stone-800 bg-stone-950/40'
+            }`}
+          >
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">Hydrometer (A4)</p>
+            <p className="mt-1 text-lg font-semibold text-stone-100">
+              Raw:{' '}
+              <span className="font-mono">
+                {state?.hydrometer_raw != null && state?.hydrometer_raw !== undefined
+                  ? state.hydrometer_raw
+                  : '—'}
+              </span>
+              {state?.hydrometer_low === true && (
+                <span className="ml-3 text-base font-semibold text-red-300">LOW — stop requested</span>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-stone-600">
+              Stop + buzzer when raw &lt; 200 (firmware).
+            </p>
+          </div>
+          <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">TDS (A5)</p>
+            <p className="mt-1 text-lg font-semibold text-stone-100">
+              Raw:{' '}
+              <span className="font-mono">
+                {state?.tds_analog_raw != null && state?.tds_analog_raw !== undefined
+                  ? state.tds_analog_raw
+                  : '—'}
+              </span>
+              {state?.tds_g_per_ml != null && state?.tds_g_per_ml !== undefined && (
+                <span className="ml-3 font-mono text-stone-300">
+                  {state.tds_g_per_ml.toFixed(6)} g/mL
+                </span>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-stone-600">
+              From TDS probe; ppm (mg/L) scale converted to g/mL (multiply by 1e-6). Calibrate against known solution.
+            </p>
+          </div>
+          <div
+            className={`rounded-lg border p-4 md:col-span-2 ${
+              state?.buzzer_alarm === true
+                ? 'border-amber-900/50 bg-amber-950/20'
+                : 'border-stone-800 bg-stone-950/40'
+            }`}
+          >
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">Buzzer (D2)</p>
+            <p className="mt-1 text-lg font-semibold text-stone-100">
+              {state?.buzzer_alarm === true ? (
+                <span className="text-amber-300">Alarming (hydrometer low)</span>
+              ) : (
+                <span className="text-stone-400">Quiet</span>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-stone-600">
+              Steady ~1 kHz tone while hydrometer is below threshold; stops when raw is above 200 again.
+            </p>
+          </div>
         </div>
         {state?.last_error && (
           <p className="mt-3 text-sm text-red-300">Last error: {state.last_error}</p>
