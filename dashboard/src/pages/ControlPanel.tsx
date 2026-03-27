@@ -7,6 +7,9 @@ const DEVICE_ID = 'arduino_r4_1';
 /** Refetch device_state while Control Panel is open (realtime backup; works if Realtime is off). */
 const DEVICE_STATE_POLL_MS = 1500;
 
+/** If no device_state update in this window, treat as not reaching the cloud (WiFi / internet / Supabase). */
+const HEARTBEAT_ONLINE_MAX_AGE_MS = 60_000;
+
 function coerceFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const n = typeof value === 'number' ? value : Number(value);
@@ -61,6 +64,22 @@ function newRunId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function heartbeatAgeMs(lastHeartbeat: string | null | undefined): number | null {
+  if (!lastHeartbeat) return null;
+  const t = Date.parse(lastHeartbeat);
+  if (!Number.isFinite(t)) return null;
+  return Date.now() - t;
+}
+
+function formatAgeShort(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return `${h}h ago`;
+}
+
 export function ControlPanel() {
   const [settings, setSettings] = useState<DeviceSettings | null>(null);
   const [state, setState] = useState<DeviceState | null>(null);
@@ -75,6 +94,8 @@ export function ControlPanel() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const countdownTimerRef = useRef<number | null>(null);
+  /** Re-render periodically so “last seen” / online threshold updates without new device_state rows. */
+  const [, setConnectivityTick] = useState(0);
 
   const canRun = useMemo(
     () => !busy && countdown === 0 && cycles >= 1 && cycles <= 999,
@@ -176,6 +197,11 @@ export function ControlPanel() {
     };
   }, []);
 
+  useEffect(() => {
+    const id = window.setInterval(() => setConnectivityTick((n) => n + 1), 5000);
+    return () => window.clearInterval(id);
+  }, []);
+
   async function saveSettings() {
     setBusy(true);
     setInfo(null);
@@ -269,6 +295,10 @@ export function ControlPanel() {
 
   const tdsAnalogRaw = coerceFiniteNumber(state?.tds_analog_raw);
   const tdsDensityGPerMl = coerceFiniteNumber(state?.tds_g_per_ml);
+
+  const heartbeatAge = heartbeatAgeMs(state?.last_heartbeat);
+  const cloudReachable =
+    heartbeatAge !== null && heartbeatAge >= 0 && heartbeatAge <= HEARTBEAT_ONLINE_MAX_AGE_MS;
 
   return (
     <div className="space-y-8">
@@ -478,6 +508,29 @@ export function ControlPanel() {
           Device status
         </h3>
         <div className="grid gap-3 md:grid-cols-2">
+          <div
+            className={`rounded-lg border p-4 ${
+              cloudReachable
+                ? 'border-emerald-900/40 bg-emerald-950/15'
+                : 'border-stone-800 bg-stone-950/40'
+            }`}
+          >
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">Cloud / internet</p>
+            <p className="mt-1 text-lg font-semibold text-stone-100">
+              {state == null ? (
+                <span className="text-stone-400">No device row</span>
+              ) : cloudReachable ? (
+                <span className="text-emerald-300">Connected</span>
+              ) : (
+                <span className="text-amber-300/90">Not connected</span>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-stone-600">
+              Inferred from recent updates to Supabase (last seen{' '}
+              {heartbeatAge !== null ? formatAgeShort(heartbeatAge) : '—'}). Unplugged WiFi or no route to
+              the project shows here after ~1 min.
+            </p>
+          </div>
           <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4">
             <p className="text-xs font-medium uppercase tracking-wider text-stone-500">State</p>
             <p className="mt-1 text-lg font-semibold text-stone-100">{state?.status ?? 'unknown'}</p>
