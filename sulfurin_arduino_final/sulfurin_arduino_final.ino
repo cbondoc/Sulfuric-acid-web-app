@@ -98,9 +98,24 @@ float tdsFromVoltage(float volts) {
         + 857.39f * volts) * 0.5f;
 }
 
-/** ppm (as mg/L) → g/mL */
-static inline float tdsPpmToGPerMl(float ppmMgPerL) {
-  return ppmMgPerL * 1.0e-6f;
+/** ADC raw at calibration (lab density known). Set to your steady reading (e.g. 494) so that maps to DENSITY_AT_CAL_G_PER_ML. */
+const float TDS_RAW_DENSITY_CAL = 494.0f;
+/** Solution density (g/mL) at TDS_RAW_DENSITY_CAL. */
+const float DENSITY_AT_CAL_G_PER_ML = 1.265f;
+
+/**
+ * Density (g/mL) from TDS analog raw.
+ * Single-point scale on the voltage curve: ρ = ρ_cal × (ppm(raw) / ppm(raw_cal)).
+ * At raw = TDS_RAW_DENSITY_CAL → ρ = DENSITY_AT_CAL_G_PER_ML. Nearby counts (490–495) stay close to 1.265 g/mL.
+ */
+float densityGPerMlFromTdsRaw(int raw) {
+  float v = raw * (ADC_VREF / (float)ADC_MAX_VAL);
+  float ppm = tdsFromVoltage(v);
+  if (ppm < 1.0f) return 0.0f;
+  float vCal = TDS_RAW_DENSITY_CAL * (ADC_VREF / (float)ADC_MAX_VAL);
+  float ppmCal = tdsFromVoltage(vCal);
+  if (ppmCal < 1.0f) return DENSITY_AT_CAL_G_PER_ML;
+  return DENSITY_AT_CAL_G_PER_ML * (ppm / ppmCal);
 }
 
 void serviceBuzzerAlarm(bool hydroLow) {
@@ -413,8 +428,7 @@ bool requestStopFromHydrometer() {
 void serviceSensorsSupabase(int hydroRaw, int tdsRaw) {
   unsigned long now = millis();
   bool low = hydroRaw < HYDRO_ALARM_BELOW;
-  float vT = tdsRaw * (ADC_VREF / (float)ADC_MAX_VAL);
-  float tdsGPerMl = tdsPpmToGPerMl(tdsFromVoltage(vT));
+  float tdsGPerMl = densityGPerMlFromTdsRaw(tdsRaw);
 
   bool hydroLowEdge = (low != prevHydroLow);
   prevHydroLow = low;

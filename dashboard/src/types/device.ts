@@ -25,7 +25,7 @@ export interface DeviceState {
   hydrometer_low?: boolean;
   /** TDS module analog 0–1023 (A5) */
   tds_analog_raw?: number | null;
-  /** Mass concentration (g/mL); sensor ppm treated as mg/L, multiplied by 1e-6 */
+  /** Solution density (g/mL); firmware scales probe curve to a calibration point */
   tds_g_per_ml?: number | null;
   /** True while hydrometer is low (buzzer alarm pattern active on D2) */
   buzzer_alarm?: boolean;

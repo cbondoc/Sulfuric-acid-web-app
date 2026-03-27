@@ -4,6 +4,24 @@ import type { DeviceSettings, DeviceState } from '../types/device';
 
 const DEVICE_ID = 'arduino_r4_1';
 
+/** Refetch device_state while Control Panel is open (realtime backup; works if Realtime is off). */
+const DEVICE_STATE_POLL_MS = 1500;
+
+function coerceFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function mergeDeviceStateRow(
+  prev: DeviceState | null,
+  incoming: Record<string, unknown> | null | undefined
+): DeviceState | null {
+  if (!incoming || typeof incoming !== 'object') return prev;
+  if (!prev) return incoming as unknown as DeviceState;
+  return { ...prev, ...incoming } as DeviceState;
+}
+
 function clampDurationSec(n: number): number {
   if (!Number.isFinite(n)) return 1;
   return Math.max(1, Math.min(86400, Math.floor(n)));
@@ -123,17 +141,32 @@ export function ControlPanel() {
 
     load();
 
+    const pollTimer = window.setInterval(async () => {
+      if (cancelled) return;
+      const { data: st, error: ste } = await supabase
+        .from('device_state')
+        .select('*')
+        .eq('device_id', DEVICE_ID)
+        .maybeSingle();
+      if (cancelled) return;
+      if (ste) return;
+      if (st) setState(st as DeviceState);
+    }, DEVICE_STATE_POLL_MS);
+
     const channel = supabase
       .channel('device_state_updates')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'device_state', filter: `device_id=eq.${DEVICE_ID}` },
-        (payload) => setState(payload.new as DeviceState)
+        (payload) => {
+          setState((prev) => mergeDeviceStateRow(prev, payload.new as Record<string, unknown>));
+        }
       )
       .subscribe();
 
     return () => {
       cancelled = true;
+      window.clearInterval(pollTimer);
       supabase.removeChannel(channel);
       if (countdownTimerRef.current) {
         window.clearInterval(countdownTimerRef.current);
@@ -233,6 +266,9 @@ export function ControlPanel() {
       setBusy(false);
     }
   }
+
+  const tdsAnalogRaw = coerceFiniteNumber(state?.tds_analog_raw);
+  const tdsDensityGPerMl = coerceFiniteNumber(state?.tds_g_per_ml);
 
   return (
     <div className="space-y-8">
@@ -483,21 +519,26 @@ export function ControlPanel() {
           </div>
           <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4">
             <p className="text-xs font-medium uppercase tracking-wider text-stone-500">TDS (A5)</p>
-            <p className="mt-1 text-lg font-semibold text-stone-100">
-              Raw:{' '}
-              <span className="font-mono">
-                {state?.tds_analog_raw != null && state?.tds_analog_raw !== undefined
-                  ? state.tds_analog_raw
-                  : '—'}
-              </span>
-              {state?.tds_g_per_ml != null && state?.tds_g_per_ml !== undefined && (
-                <span className="ml-3 font-mono text-stone-300">
-                  {state.tds_g_per_ml.toFixed(6)} g/mL
+            <div className="mt-1 space-y-1">
+              <p className="text-lg font-semibold text-stone-100">
+                Raw:{' '}
+                <span className="font-mono tabular-nums">
+                  {tdsAnalogRaw !== null ? String(Math.round(tdsAnalogRaw)) : '—'}
                 </span>
+              </p>
+              {tdsDensityGPerMl !== null && (
+                <p className="text-lg font-semibold text-stone-100">
+                  Density:{' '}
+                  <span className="font-mono tabular-nums text-stone-300">
+                    {tdsDensityGPerMl.toFixed(6)} g/mL
+                  </span>
+                </p>
               )}
-            </p>
-            <p className="mt-1 text-xs text-stone-600">
-              From TDS probe; ppm (mg/L) scale converted to g/mL (multiply by 1e-6). Calibrate against known solution.
+            </div>
+            <p className="mt-2 text-xs text-stone-600">
+              Analog 0–1023 from the probe; firmware converts to solution density (g/mL) using a calibration point.
+              Adjust <span className="font-mono text-stone-500">TDS_RAW_DENSITY_CAL</span> /{' '}
+              <span className="font-mono text-stone-500">DENSITY_AT_CAL_G_PER_ML</span> in the sketch if needed.
             </p>
           </div>
           <div
