@@ -11,10 +11,10 @@ export function Layout() {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-100">
-      <header className="border-b border-amber-900/50 bg-stone-900/80 backdrop-blur">
+    <div className="min-h-screen bg-white text-stone-900">
+      <header className="border-b border-yellow-400 bg-yellow-300">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <h1 className="text-lg font-semibold tracking-tight text-amber-400">
+          <h1 className="text-lg font-semibold tracking-tight text-stone-900">
             Sulfuric Acid Mixing Dashboard
           </h1>
           <nav className="flex gap-1">
@@ -24,8 +24,8 @@ export function Layout() {
                 to={to}
                 className={`rounded px-3 py-2 text-sm font-medium transition ${
                   location.pathname === to
-                    ? 'bg-amber-600/20 text-amber-400'
-                    : 'text-stone-400 hover:bg-stone-800 hover:text-stone-200'
+                    ? 'bg-yellow-500 text-white shadow-sm'
+                    : 'text-stone-800 hover:bg-yellow-200'
                 }`}
               >
                 {label}

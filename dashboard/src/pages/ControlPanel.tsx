@@ -304,21 +304,21 @@ export function ControlPanel() {
     <div className="space-y-8">
       {countdown > 0 && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-stone-950/80 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 grid place-items-center bg-stone-900/25 px-4 py-6 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Sending command countdown"
         >
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-amber-900/40 bg-stone-950 shadow-2xl shadow-black/60">
-            <div className="border-b border-stone-800 bg-linear-to-b from-amber-500/10 to-transparent px-6 py-5">
-              <p className="text-xs font-medium uppercase tracking-wider text-stone-400">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-amber-300 bg-white shadow-2xl shadow-stone-300/50">
+            <div className="border-b border-amber-200 bg-linear-to-b from-yellow-200/80 to-white px-6 py-5">
+              <p className="text-xs font-medium uppercase tracking-wider text-stone-600">
                 Sending command
               </p>
-              <h3 className="mt-1 text-2xl font-semibold text-stone-100 sm:text-3xl">
+              <h3 className="mt-1 text-2xl font-semibold text-stone-900 sm:text-3xl">
                 {countdownLabel ?? 'Run'} in{' '}
-                <span className="text-amber-400">{countdown}s</span>
+                <span className="text-amber-700">{countdown}s</span>
               </h3>
-              <p className="mt-2 text-sm text-stone-400">
+              <p className="mt-2 text-sm text-stone-600">
                 Please wait while the command is propagated to the device.
               </p>
             </div>
@@ -326,8 +326,8 @@ export function ControlPanel() {
             <div className="px-6 py-6">
               <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
                 <div className="order-2 sm:order-1">
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-stone-800">
-                    <div className="h-full origin-left bg-linear-to-r from-amber-500 to-amber-300 motion-safe:animate-[countdown_10s_linear_forwards]" />
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-stone-200">
+                    <div className="h-full origin-left bg-linear-to-r from-yellow-400 to-amber-400 motion-safe:animate-[countdown_10s_linear_forwards]" />
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs text-stone-500">
                     <span>0s</span>
@@ -336,17 +336,17 @@ export function ControlPanel() {
                 </div>
 
                 <div className="order-1 sm:order-2 flex justify-center">
-                  <div className="relative grid h-28 w-28 place-items-center rounded-full border border-amber-900/40 bg-amber-500/10 sm:h-32 sm:w-32">
-                    <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-stone-800" />
-                    <div className="h-24 w-24 rounded-full bg-stone-950/60 sm:h-28 sm:w-28" />
-                    <div className="absolute text-3xl font-bold tracking-tight text-amber-300 sm:text-4xl">
+                  <div className="relative grid h-28 w-28 place-items-center rounded-full border border-amber-400 bg-yellow-100 sm:h-32 sm:w-32">
+                    <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-amber-200" />
+                    <div className="h-24 w-24 rounded-full bg-white/90 sm:h-28 sm:w-28" />
+                    <div className="absolute text-3xl font-bold tracking-tight text-amber-800 sm:text-4xl">
                       {countdown}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <p className="mt-6 text-center text-sm text-stone-500">
+              <p className="mt-6 text-center text-sm text-stone-600">
                 Controls are temporarily locked to avoid double-sending.
               </p>
             </div>
@@ -354,34 +354,34 @@ export function ControlPanel() {
         </div>
       )}
       <div>
-        <h2 className="text-xl font-semibold text-stone-100">Control Panel</h2>
-        <p className="text-sm text-stone-500">Set cycles then press Run to start the Arduino.</p>
+        <h2 className="text-xl font-semibold text-stone-900">Control Panel</h2>
+        <p className="text-sm text-stone-600">Set cycles then press Run to start the Arduino.</p>
       </div>
 
       {(error || info) && (
         <div
           className={`rounded-lg border px-4 py-3 ${
             error
-              ? 'border-red-900/50 bg-red-950/30 text-red-300'
-              : 'border-emerald-900/40 bg-emerald-950/20 text-emerald-200'
+              ? 'border-red-200 bg-red-50 text-red-800'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-900'
           }`}
         >
           {error ?? info}
         </div>
       )}
 
-      <section className="rounded-xl border border-stone-800 bg-stone-900/30 p-6">
-        <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-stone-500">
+      <section className="rounded-xl border border-stone-200 bg-stone-50 p-6">
+        <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-stone-600">
           Relay ON time
         </h3>
         <p className="mb-4 text-xs text-stone-600">
-          Enter <span className="text-stone-400">seconds</span> here. They are saved to Supabase and sent to the
-          device as <span className="text-stone-400">milliseconds</span>. Default seconds are shown under each
+          Enter <span className="font-medium text-stone-800">seconds</span> here. They are saved to Supabase and sent to the
+          device as <span className="font-medium text-stone-800">milliseconds</span>. Default seconds are shown under each
           field. Order on the device: acid → water → mixer → rest (rest runs twice).
         </p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label htmlFor="dur-acid" className="block text-xs font-medium text-stone-500">
+            <label htmlFor="dur-acid" className="block text-xs font-medium text-stone-600">
               Container acid (s)
             </label>
             <input
@@ -392,14 +392,14 @@ export function ControlPanel() {
               value={acidSec}
               onChange={(e) => setAcidSec(clampDurationSec(Number(e.target.value)))}
               disabled={controlsDisabled || countdown > 0}
-              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+              className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
             />
             <p className="mt-1 text-xs text-stone-600">
-              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.acid}</span> s
+              Default: <span className="font-mono text-stone-800">{DEFAULT_RELAY_DURATION_SEC.acid}</span> s
             </p>
           </div>
           <div>
-            <label htmlFor="dur-water" className="block text-xs font-medium text-stone-500">
+            <label htmlFor="dur-water" className="block text-xs font-medium text-stone-600">
               Container water (s)
             </label>
             <input
@@ -410,14 +410,14 @@ export function ControlPanel() {
               value={waterSec}
               onChange={(e) => setWaterSec(clampDurationSec(Number(e.target.value)))}
               disabled={controlsDisabled || countdown > 0}
-              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+              className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
             />
             <p className="mt-1 text-xs text-stone-600">
-              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.water}</span> s
+              Default: <span className="font-mono text-stone-800">{DEFAULT_RELAY_DURATION_SEC.water}</span> s
             </p>
           </div>
           <div>
-            <label htmlFor="dur-mixer" className="block text-xs font-medium text-stone-500">
+            <label htmlFor="dur-mixer" className="block text-xs font-medium text-stone-600">
               Mixer (s)
             </label>
             <input
@@ -428,14 +428,14 @@ export function ControlPanel() {
               value={mixerSec}
               onChange={(e) => setMixerSec(clampDurationSec(Number(e.target.value)))}
               disabled={controlsDisabled || countdown > 0}
-              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+              className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
             />
             <p className="mt-1 text-xs text-stone-600">
-              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.mixer}</span> s
+              Default: <span className="font-mono text-stone-800">{DEFAULT_RELAY_DURATION_SEC.mixer}</span> s
             </p>
           </div>
           <div>
-            <label htmlFor="dur-rest" className="block text-xs font-medium text-stone-500">
+            <label htmlFor="dur-rest" className="block text-xs font-medium text-stone-600">
               Container rest (s)
             </label>
             <input
@@ -446,19 +446,19 @@ export function ControlPanel() {
               value={restSec}
               onChange={(e) => setRestSec(clampDurationSec(Number(e.target.value)))}
               disabled={controlsDisabled || countdown > 0}
-              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+              className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
             />
             <p className="mt-1 text-xs text-stone-600">
-              Default: <span className="font-mono text-stone-400">{DEFAULT_RELAY_DURATION_SEC.rest}</span> s
+              Default: <span className="font-mono text-stone-800">{DEFAULT_RELAY_DURATION_SEC.rest}</span> s
             </p>
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-end gap-4 border-t border-stone-800 pt-6">
+        <div className="mt-6 flex flex-wrap items-end gap-4 border-t border-stone-200 pt-6">
           <div className="min-w-[240px]">
             <label
               htmlFor="cycles-per-run"
-              className="block text-xs font-medium uppercase tracking-wider text-stone-500"
+              className="block text-xs font-medium uppercase tracking-wider text-stone-600"
             >
               Cycles per run
             </label>
@@ -470,7 +470,7 @@ export function ControlPanel() {
               min={1}
               max={999}
               disabled={controlsDisabled || countdown > 0}
-              className="mt-2 w-full rounded-lg border border-stone-700 bg-stone-950/60 px-3 py-2 text-stone-100 outline-none focus:border-amber-600/60"
+              className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
             />
             <p className="mt-2 text-xs text-stone-600">
               The Arduino will run exactly this many full cycles, then stop and wait.
@@ -481,21 +481,21 @@ export function ControlPanel() {
             <button
               onClick={saveSettings}
               disabled={controlsDisabled}
-              className="rounded-lg border border-stone-700 bg-stone-800/40 px-4 py-2 text-sm font-medium text-stone-200 hover:bg-stone-800 disabled:opacity-50"
+              className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 hover:bg-stone-100 disabled:opacity-50"
             >
               Save
             </button>
             <button
               onClick={run}
               disabled={!canRun}
-              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-400 disabled:opacity-50"
+              className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-semibold text-stone-900 shadow-sm hover:bg-yellow-400 disabled:opacity-50"
             >
               Run
             </button>
             <button
               onClick={stop}
               disabled={controlsDisabled || countdown > 0}
-              className="rounded-lg border border-red-900/40 bg-red-950/20 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-50"
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
             >
               Stop
             </button>
@@ -503,26 +503,26 @@ export function ControlPanel() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-amber-900/40 bg-stone-900/50 p-6">
-        <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-amber-500/90">
+      <section className="rounded-xl border border-amber-300 bg-amber-50 p-6">
+        <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-amber-800">
           Device status
         </h3>
         <div className="grid gap-3 md:grid-cols-2">
           <div
             className={`rounded-lg border p-4 ${
               cloudReachable
-                ? 'border-emerald-900/40 bg-emerald-950/15'
-                : 'border-stone-800 bg-stone-950/40'
+                ? 'border-emerald-200 bg-emerald-50'
+                : 'border-stone-200 bg-white'
             }`}
           >
-            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">Cloud / internet</p>
-            <p className="mt-1 text-lg font-semibold text-stone-100">
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-600">Cloud / internet</p>
+            <p className="mt-1 text-lg font-semibold text-stone-900">
               {state == null ? (
-                <span className="text-stone-400">No device row</span>
+                <span className="text-stone-500">No device row</span>
               ) : cloudReachable ? (
-                <span className="text-emerald-300">Connected</span>
+                <span className="text-emerald-700">Connected</span>
               ) : (
-                <span className="text-amber-300/90">Not connected</span>
+                <span className="text-amber-700">Not connected</span>
               )}
             </p>
             <p className="mt-1 text-xs text-stone-600">
@@ -531,16 +531,16 @@ export function ControlPanel() {
               the project shows here after ~1 min.
             </p>
           </div>
-          <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">State</p>
-            <p className="mt-1 text-lg font-semibold text-stone-100">{state?.status ?? 'unknown'}</p>
+          <div className="rounded-lg border border-stone-200 bg-white p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-600">State</p>
+            <p className="mt-1 text-lg font-semibold text-stone-900">{state?.status ?? 'unknown'}</p>
             <p className="mt-1 text-xs text-stone-600">
               Heartbeat: {state?.last_heartbeat ? new Date(state.last_heartbeat).toLocaleString() : '—'}
             </p>
           </div>
-          <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">Progress</p>
-            <p className="mt-1 text-lg font-semibold text-stone-100">
+          <div className="rounded-lg border border-stone-200 bg-white p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-600">Progress</p>
+            <p className="mt-1 text-lg font-semibold text-stone-900">
               {state?.cycles_completed ?? 0} / {settings?.cycles_requested ?? cycles}
             </p>
             <p className="mt-1 text-xs text-stone-600">
@@ -550,12 +550,12 @@ export function ControlPanel() {
           <div
             className={`rounded-lg border p-4 ${
               state?.hydrometer_low === true
-                ? 'border-red-900/50 bg-red-950/25'
-                : 'border-stone-800 bg-stone-950/40'
+                ? 'border-red-200 bg-red-50'
+                : 'border-stone-200 bg-white'
             }`}
           >
-            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">Hydrometer (A4)</p>
-            <p className="mt-1 text-lg font-semibold text-stone-100">
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-600">Hydrometer (A4)</p>
+            <p className="mt-1 text-lg font-semibold text-stone-900">
               Raw:{' '}
               <span className="font-mono">
                 {state?.hydrometer_raw != null && state?.hydrometer_raw !== undefined
@@ -563,26 +563,26 @@ export function ControlPanel() {
                   : '—'}
               </span>
               {state?.hydrometer_low === true && (
-                <span className="ml-3 text-base font-semibold text-red-300">LOW — stop requested</span>
+                <span className="ml-3 text-base font-semibold text-red-700">LOW — stop requested</span>
               )}
             </p>
             <p className="mt-1 text-xs text-stone-600">
               Stop + buzzer when raw &lt; 200 (firmware).
             </p>
           </div>
-          <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">TDS (A5)</p>
+          <div className="rounded-lg border border-stone-200 bg-white p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-600">TDS (A5)</p>
             <div className="mt-1 space-y-1">
-              <p className="text-lg font-semibold text-stone-100">
+              <p className="text-lg font-semibold text-stone-900">
                 Raw:{' '}
                 <span className="font-mono tabular-nums">
                   {tdsAnalogRaw !== null ? String(Math.round(tdsAnalogRaw)) : '—'}
                 </span>
               </p>
               {tdsDensityGPerMl !== null && (
-                <p className="text-lg font-semibold text-stone-100">
+                <p className="text-lg font-semibold text-stone-900">
                   Density:{' '}
-                  <span className="font-mono tabular-nums text-stone-300">
+                  <span className="font-mono tabular-nums text-stone-700">
                     {tdsDensityGPerMl.toFixed(6)} g/mL
                   </span>
                 </p>
@@ -590,23 +590,23 @@ export function ControlPanel() {
             </div>
             <p className="mt-2 text-xs text-stone-600">
               Analog 0–1023 from the probe; firmware converts to solution density (g/mL) using a calibration point.
-              Adjust <span className="font-mono text-stone-500">TDS_RAW_DENSITY_CAL</span> /{' '}
-              <span className="font-mono text-stone-500">DENSITY_AT_CAL_G_PER_ML</span> in the sketch if needed.
+              Adjust <span className="font-mono text-stone-700">TDS_RAW_DENSITY_CAL</span> /{' '}
+              <span className="font-mono text-stone-700">DENSITY_AT_CAL_G_PER_ML</span> in the sketch if needed.
             </p>
           </div>
           <div
             className={`rounded-lg border p-4 md:col-span-2 ${
               state?.buzzer_alarm === true
-                ? 'border-amber-900/50 bg-amber-950/20'
-                : 'border-stone-800 bg-stone-950/40'
+                ? 'border-amber-300 bg-yellow-100'
+                : 'border-stone-200 bg-white'
             }`}
           >
-            <p className="text-xs font-medium uppercase tracking-wider text-stone-500">Buzzer (D2)</p>
-            <p className="mt-1 text-lg font-semibold text-stone-100">
+            <p className="text-xs font-medium uppercase tracking-wider text-stone-600">Buzzer (D2)</p>
+            <p className="mt-1 text-lg font-semibold text-stone-900">
               {state?.buzzer_alarm === true ? (
-                <span className="text-amber-300">Alarming (hydrometer low)</span>
+                <span className="text-amber-800">Alarming (hydrometer low)</span>
               ) : (
-                <span className="text-stone-400">Quiet</span>
+                <span className="text-stone-500">Quiet</span>
               )}
             </p>
             <p className="mt-1 text-xs text-stone-600">
@@ -615,7 +615,7 @@ export function ControlPanel() {
           </div>
         </div>
         {state?.last_error && (
-          <p className="mt-3 text-sm text-red-300">Last error: {state.last_error}</p>
+          <p className="mt-3 text-sm text-red-700">Last error: {state.last_error}</p>
         )}
       </section>
     </div>
